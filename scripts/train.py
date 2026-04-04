@@ -14,6 +14,7 @@ from tqdm import tqdm
 import os
 import time
 from timeit import default_timer
+import glob
 
 # -----------------------
 # Load config
@@ -22,6 +23,7 @@ from timeit import default_timer
 cfg = load_config("configs/train.yaml")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 print(f"Using device: {device}")
 if device.type == "cuda":
     torch.cuda.empty_cache()
@@ -158,13 +160,35 @@ log_save = cfg.paths.save_dir
 os.makedirs(os.path.dirname(log_save), exist_ok=True)
 os.makedirs(os.path.dirname(path1), exist_ok=True)
 
-log = []
+# =========================================================
+# Resume from checkpoint if exists
+# =========================================================
+checkpoint_files = sorted(glob.glob(path1.replace(".pt", "_ep*.pt")))
+start_epoch = 0
+
+if checkpoint_files:
+    latest_ckpt = checkpoint_files[-1]  # pick the last checkpoint
+    print(f"Resuming from checkpoint: {latest_ckpt}")
+    checkpoint = torch.load(latest_ckpt, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    start_epoch = checkpoint['epoch'] + 1
+
+# Load existing logs
+if os.path.exists(log_save):
+    with open(log_save, "r") as f:
+        log = json.load(f)
+else:
+    log = []
+
+# log = []
 
 # =========================================================
 # Training
 # =========================================================
 
-for ep in tqdm(range(epochs)):
+for ep in tqdm(range(start_epoch, epochs)):
     model.train()
     t_epoch_start = time.time()
 
